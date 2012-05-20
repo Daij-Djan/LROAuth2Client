@@ -6,18 +6,30 @@
 //  Copyright 2010 LJR Software Limited. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 
+#if TARGET_OS_IPHONE
+#define NSEqualToComparison 0
+#endif
 
-@interface LROAuth2AccessToken : UIView <NSCoding> {
-  NSDictionary *authResponseData;
-  NSDate *expiresAt;
+#define OAuthRequestHeaderAuthorizationKey @"Authorization"
+
+@class ASIHTTPRequest;
+
+@interface LROAuth2AccessToken : NSObject <NSCoding> {
+@protected
+	NSString *_accessToken;
+	NSString *_refreshToken;
+	NSDate *_expiresAt;
+	NSDictionary *_rawData;
 }
-@property (nonatomic, readonly) NSString *accessToken;
-@property (nonatomic, readonly) NSString *refreshToken;
-@property (nonatomic, readonly) NSDate *expiresAt;
+@property (strong, readonly) NSString *accessToken;
+@property (strong, readonly) NSString *refreshToken;
+@property (strong, readonly) NSDate *expiresAt;
+@property (strong, readonly) NSDictionary *rawData;
+@property (assign, readonly) BOOL hasExpired;
 
-- (id)initWithAuthorizationResponse:(NSDictionary *)_data;
++ (LROAuth2AccessToken*)tokenWithAuthorizationResponse:(NSDictionary *)data;
 - (void)refreshFromAuthorizationResponse:(NSDictionary *)_data;
-- (BOOL)hasExpired;
+- (void)authorizeHTTPRequest:(ASIHTTPRequest*)request;
 @end

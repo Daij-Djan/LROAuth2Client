@@ -6,7 +6,7 @@
 //  Copyright 2010 LJR Software Limited. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 #import "ASIHTTPRequestDelegate.h"
 #import "LROAuth2ClientDelegate.h"
 
@@ -21,7 +21,7 @@
   NSURL *tokenURL;
   LROAuth2AccessToken *accessToken;
   NSMutableArray *requests;
-  id<LROAuth2ClientDelegate> delegate;
+  __weak id<LROAuth2ClientDelegate> delegate;
   BOOL debug;
   
  @private
@@ -34,7 +34,7 @@
 @property (nonatomic, copy) NSURL *userURL;
 @property (nonatomic, copy) NSURL *tokenURL;
 @property (nonatomic, readonly) LROAuth2AccessToken *accessToken;
-@property (nonatomic, assign) id<LROAuth2ClientDelegate> delegate;
+@property (nonatomic, weak) id<LROAuth2ClientDelegate> delegate;
 @property (nonatomic, assign) BOOL debug;
 
 - (id)initWithClientID:(NSString *)_clientID 
@@ -43,11 +43,9 @@
 
 - (NSURLRequest *)userAuthorizationRequestWithParameters:(NSDictionary *)additionalParameters;
 - (void)verifyAuthorizationWithAccessCode:(NSString *)accessCode;
+- (void)tryToGetAccessTokenForClientCredentials;
 - (void)refreshAccessToken:(LROAuth2AccessToken *)_accessToken;
-@end
-
-@interface LROAuth2Client (UIWebViewIntegration) <UIWebViewDelegate>
-- (void)authorizeUsingWebView:(UIWebView *)webView;
-- (void)authorizeUsingWebView:(UIWebView *)webView additionalParameters:(NSDictionary *)additionalParameters;
+- (void)directlyRefreshAccessToken:(LROAuth2AccessToken *)_accessToken;
 - (void)extractAccessCodeFromCallbackURL:(NSURL *)url;
+
 @end

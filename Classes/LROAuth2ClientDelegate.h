@@ -6,17 +6,24 @@
 //  Copyright 2010 LJR Software Limited. All rights reserved.
 //
 
-#import <UIKit/UIKit.h>
-
 @class LROAuth2Client;
 
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
 @protocol LROAuth2ClientDelegate <UIWebViewDelegate>
+#else
+#import <WebKit/WebKit.h>
+@protocol LROAuth2ClientDelegate
+#endif
 
 @required
-- (void)oauthClientDidReceiveAccessToken:(LROAuth2Client *)client;
-- (void)oauthClientDidRefreshAccessToken:(LROAuth2Client *)client;
+- (void)oauthClientDidFailToReceiveAccessToken:(LROAuth2Client *)client;
+- (void)oauthClient:(LROAuth2Client *)client didReceiveAccessTokenWith:(NSDictionary*)authorizationData;
+- (void)oauthClientDidFailToRefreshAccessToken:(LROAuth2Client *)client;
+- (void)oauthClient:(LROAuth2Client *)client didRefreshAccessTokenWith:(NSDictionary*)authorizationData;
 
-@optional
+//@optional
+- (void)oauthClientDidFailToReceiveAccessCode:(LROAuth2Client *)client;
 - (void)oauthClientDidReceiveAccessCode:(LROAuth2Client *)client;
 - (void)oauthClientDidCancel:(LROAuth2Client *)client;
 

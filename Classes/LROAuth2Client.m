@@ -6,7 +6,6 @@
 //  Copyright 2010 LJR Software Limited. All rights reserved.
 //
 
-#import <YAJLIOS/NSObject+YAJL.h>
 #import "LROAuth2Client.h"
 #import "ASIHTTPRequest.h"
 #import "NSURL+QueryInspector.h"
@@ -47,15 +46,15 @@
     [request setDelegate:nil];
     [request cancel];
   }
-  [requests release];
-  [accessToken release];
-  [clientID release];
-  [clientSecret release];
-  [userURL release];
-  [tokenURL release];
-  [redirectURL release];
-  [cancelURL release];
-  [super dealloc];
+//  [requests release];
+//  [accessToken release];
+//  [clientID release];
+// [clientSecret release];
+//  [userURL release];
+//  [tokenURL release];
+//  [redirectURL release];
+//  [cancelURL release];
+//  [super dealloc];
 }
 
 #pragma mark -
@@ -64,9 +63,10 @@
 - (NSURLRequest *)userAuthorizationRequestWithParameters:(NSDictionary *)additionalParameters;
 {
   NSDictionary *params = [NSMutableDictionary dictionary];
-  [params setValue:@"web_server" forKey:@"type"];
+//	[params setValue:@"***" forKey:@"state"];
   [params setValue:clientID forKey:@"client_id"];
   [params setValue:[redirectURL absoluteString] forKey:@"redirect_uri"];
+  [params setValue:@"code" forKey:@"response_type"];
   
   if (additionalParameters) {
     for (NSString *key in additionalParameters) {
@@ -77,7 +77,7 @@
   NSMutableURLRequest *authRequest = [NSMutableURLRequest requestWithURL:fullURL];
   [authRequest setHTTPMethod:@"GET"];
 
-  return [[authRequest copy] autorelease];
+	return [authRequest copy];// autorelease];
 }
 
 - (void)verifyAuthorizationWithAccessCode:(NSString *)accessCode;
@@ -88,40 +88,156 @@
     isVerifying = YES;
     
     NSDictionary *params = [NSMutableDictionary dictionary];
-    [params setValue:@"web_server" forKey:@"type"];
-    [params setValue:clientID forKey:@"client_id"];
+    [params setValue:@"authorization_code" forKey:@"grant_type"]; 
     [params setValue:[redirectURL absoluteString] forKey:@"redirect_uri"];
-    [params setValue:clientSecret forKey:@"client_secret"];
     [params setValue:accessCode forKey:@"code"];
-    
+
     ASIHTTPRequest *request = [ASIHTTPRequest requestWithURL:self.tokenURL];
     [request setRequestMethod:@"POST"];
     [request addRequestHeader:@"Content-Type" value:@"application/x-www-form-urlencoded"];
+
     [request appendPostData:[[params stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding]];
+		
+	  //use for basic HTTP authentication	  
+	[request addBasicAuthenticationHeaderWithUsername:clientID
+										  andPassword:clientSecret];
     [request setDelegate:self];
     [requests addObject:request];
     [request startAsynchronous];
   }
 }
 
+- (void)tryToGetAccessTokenForClientCredentials
+{
+    @synchronized(self) {
+        if (isVerifying) return; // don't allow more than one auth request
+        
+        isVerifying = YES;
+        
+        NSDictionary *params = [NSMutableDictionary dictionary];
+        [params setValue:@"client_credentials" forKey:@"grant_type"]; 
+        
+        ASIHTTPRequest *request = [ASIHTTPRequest requestWithURL:self.tokenURL];
+        [request setRequestMethod:@"POST"];
+        [request addRequestHeader:@"Content-Type" value:@"application/x-www-form-urlencoded"];
+        
+        [request appendPostData:[[params stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding]];
+		
+        //use for basic HTTP authentication	  
+        [request addBasicAuthenticationHeaderWithUsername:clientID
+                                              andPassword:clientSecret];
+        [request setDelegate:self];
+        [requests addObject:request];
+        [request startAsynchronous];
+    }
+}
+
 - (void)refreshAccessToken:(LROAuth2AccessToken *)_accessToken;
 {
-  accessToken = [_accessToken retain];
+	accessToken = _accessToken;// retain];
   
   NSDictionary *params = [NSMutableDictionary dictionary];
-  [params setValue:@"refresh" forKey:@"type"];
-  [params setValue:clientID forKey:@"client_id"];
+  [params setValue:@"refresh_token" forKey:@"grant_type"];
   [params setValue:[redirectURL absoluteString] forKey:@"redirect_uri"];
-  [params setValue:clientSecret forKey:@"client_secret"];
   [params setValue:_accessToken.refreshToken forKey:@"refresh_token"];
-  
+
+//	//for now just post it
+//  [params setValue:clientID forKey:@"client_id"];
+//  [params setValue:clientSecret forKey:@"client_g"];
+	
   ASIHTTPRequest *request = [ASIHTTPRequest requestWithURL:self.tokenURL];
   [request setRequestMethod:@"POST"];
   [request addRequestHeader:@"Content-Type" value:@"application/x-www-form-urlencoded"];
+
+	//use for basic HTTP authentication	  
+	[request addBasicAuthenticationHeaderWithUsername:clientID
+										  andPassword:clientSecret];
+	
   [request appendPostData:[[params stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding]];
   [request setDelegate:self];
   [requests addObject:request];
   [request startAsynchronous];
+}
+
+- (void)directlyRefreshAccessToken:(LROAuth2AccessToken *)_accessToken {
+	accessToken = _accessToken;// retain];
+    
+    NSDictionary *params = [NSMutableDictionary dictionary];
+    [params setValue:@"refresh_token" forKey:@"grant_type"];
+    [params setValue:[redirectURL absoluteString] forKey:@"redirect_uri"];
+    [params setValue:_accessToken.refreshToken forKey:@"refresh_token"];
+    
+    //	//for now just post it
+    //  [params setValue:clientID forKey:@"client_id"];
+    //  [params setValue:clientSecret forKey:@"client_g"];
+	
+    ASIHTTPRequest *request = [ASIHTTPRequest requestWithURL:self.tokenURL];
+    [request setRequestMethod:@"POST"];
+    [request addRequestHeader:@"Content-Type" value:@"application/x-www-form-urlencoded"];
+    
+	//use for basic HTTP authentication	  
+	[request addBasicAuthenticationHeaderWithUsername:clientID
+										  andPassword:clientSecret];
+	
+    [request appendPostData:[[params stringWithFormEncodedComponents] dataUsingEncoding:NSUTF8StringEncoding]];
+
+    __weak ASIHTTPRequest *r = request;
+    [request setCompletionBlock:^{
+        NSData* data = [r responseData];
+        NSError *parseError = nil;
+        NSDictionary *authorizationData = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&parseError];
+        
+        //see if we can get a valid JSON object
+        if (parseError) {
+            // try and decode the response body as a query string instead
+            NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            authorizationData = [NSDictionary dictionaryWithFormEncodedString:responseString];
+            //[responseString release];
+            if ([authorizationData valueForKey:@"access_token"] == nil) { 
+                // TODO handle complete parsing failure
+                NSLog(@"Unhandled parsing failure when getting token");
+                
+                authorizationData = nil;
+            }
+        }  
+        //error out
+        if ([authorizationData valueForKey:@"error"] != nil) { 		
+            authorizationData = nil;
+        }
+        
+        if(authorizationData) {
+            NSNumber *gmtTime = [NSNumber numberWithDouble:[[NSDate date] timeIntervalSince1970]];
+            [(NSMutableDictionary*)authorizationData setObject:gmtTime forKey:@"issue_time"];
+            
+            if (accessToken == nil) {
+                accessToken = [LROAuth2AccessToken tokenWithAuthorizationResponse:authorizationData];
+                //    if ([self.delegate respondsToSelector:@selector(oauthClientDidReceiveAccessToken:)]) {
+                [self.delegate oauthClient:self didReceiveAccessTokenWith:authorizationData];
+                //    } 
+            } else {
+                [accessToken refreshFromAuthorizationResponse:authorizationData];
+                //    if ([self.delegate respondsToSelector:@selector(oauthClientDidRefreshAccessToken:)]) {
+                [self.delegate oauthClient:self didRefreshAccessTokenWith:authorizationData];
+                //    }
+            }
+        }
+        else {
+            NSLog(@"%@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+            if (accessToken == nil) {
+                [self.delegate oauthClientDidFailToReceiveAccessToken:self];
+            } else {
+                NSLog(@"fail for %@", [accessToken rawData]);
+                [self.delegate oauthClientDidFailToRefreshAccessToken:self];
+            }
+        }
+    }];
+    [request setFailedBlock:^{
+        NSLog(@"[oauth] request failed with code %d, %@", [r responseStatusCode], [r responseString]);
+        if (r.completionBlock)
+			r.completionBlock();
+    }];
+    
+    [request startSynchronous];
 }
 
 #pragma mark -
@@ -136,139 +252,86 @@
 
 - (void)requestFinished:(ASIHTTPRequest *)request
 {
-  if (self.debug) {
-    NSLog(@"[oauth] finished verification request, %@ (%d)", [request responseString], [request responseStatusCode]);
-  }
-  isVerifying = NO;
-  
-  [requests removeObject:request];
+	NSData* data = [request responseData];
+	//  if( [request isResponseCompressed]) {
+	//    data = [request uncompressZippedData:rawData];
+	//  }
+    
+	NSError *parseError = nil;
+	NSDictionary *authorizationData = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:&parseError];
+	
+	//see if we can get a valid JSON object
+	if (parseError) {
+		// try and decode the response body as a query string instead
+		NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+		authorizationData = [NSDictionary dictionaryWithFormEncodedString:responseString];
+		//[responseString release];
+		if ([authorizationData valueForKey:@"access_token"] == nil) { 
+			// TODO handle complete parsing failure
+			NSAssert(NO, @"Unhandled parsing failure");
+			
+			authorizationData = nil;
+		}
+	}  
+	//error out
+	if ([authorizationData valueForKey:@"error"] != nil) { 		
+		authorizationData = nil;
+	}
+	
+	if(authorizationData) {
+		NSNumber *gmtTime = [NSNumber numberWithDouble:[[NSDate date] timeIntervalSince1970]];
+		[(NSMutableDictionary*)authorizationData setObject:gmtTime forKey:@"issue_time"];
+		 
+		if (accessToken == nil) {
+			accessToken = [LROAuth2AccessToken tokenWithAuthorizationResponse:authorizationData];
+			//    if ([self.delegate respondsToSelector:@selector(oauthClientDidReceiveAccessToken:)]) {
+			[self.delegate oauthClient:self didReceiveAccessTokenWith:authorizationData];
+			//    } 
+		} else {
+			[accessToken refreshFromAuthorizationResponse:authorizationData];
+			//    if ([self.delegate respondsToSelector:@selector(oauthClientDidRefreshAccessToken:)]) {
+			[self.delegate oauthClient:self didRefreshAccessTokenWith:authorizationData];
+			//    }
+		}
+	}
+	else {
+		if (accessToken == nil) {
+            NSLog(@"%@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+			[self.delegate oauthClientDidFailToReceiveAccessToken:self];
+		} else {
+			[self.delegate oauthClientDidFailToRefreshAccessToken:self];
+		}
+	}
+	if (self.debug) {
+		NSLog(@"[oauth] finished verification request, %@ (%d)", [request responseString], [request responseStatusCode]);
+	}
+	isVerifying = NO;
+
+	[requests removeObject:request];
 }
 
 - (void)requestFailed:(ASIHTTPRequest *)request
 {
-  if (self.debug) {
+//  if (self.debug) {
     NSLog(@"[oauth] request failed with code %d, %@", [request responseStatusCode], [request responseString]);
-  }
-}
-
-- (void)request:(ASIHTTPRequest *)request didReceiveData:(NSData *)rawData
-{
-  NSData* data = rawData;
-  if( [request isResponseCompressed]) {
-    data = [ASIHTTPRequest uncompressZippedData:rawData];
-  }
-    
-  NSError *parseError = nil;
-  NSDictionary *authorizationData = [data yajl_JSON:&parseError];
-  
-  if (parseError) {
-    // try and decode the response body as a query string instead
-    NSString *responseString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    authorizationData = [NSDictionary dictionaryWithFormEncodedString:responseString];
-    [responseString release];
-    if ([authorizationData valueForKey:@"access_token"] == nil) { 
-      // TODO handle complete parsing failure
-      NSAssert(NO, @"Unhandled parsing failure");
-    }
-  }  
-  if (accessToken == nil) {
-    accessToken = [[LROAuth2AccessToken alloc] initWithAuthorizationResponse:authorizationData];
-    if ([self.delegate respondsToSelector:@selector(oauthClientDidReceiveAccessToken:)]) {
-      [self.delegate oauthClientDidReceiveAccessToken:self];
-    } 
-  } else {
-    [accessToken refreshFromAuthorizationResponse:authorizationData];
-    if ([self.delegate respondsToSelector:@selector(oauthClientDidRefreshAccessToken:)]) {
-      [self.delegate oauthClientDidRefreshAccessToken:self];
-    }
-  }
-}
-
-@end
-
-@implementation LROAuth2Client (UIWebViewIntegration)
-
-- (void)authorizeUsingWebView:(UIWebView *)webView;
-{
-  [self authorizeUsingWebView:webView additionalParameters:nil];
-}
-
-- (void)authorizeUsingWebView:(UIWebView *)webView additionalParameters:(NSDictionary *)additionalParameters;
-{
-  [webView setDelegate:self];
-  [webView loadRequest:[self userAuthorizationRequestWithParameters:additionalParameters]];
-}
-
-- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType;
-{  
-  if ([[request.URL absoluteString] hasPrefix:[self.redirectURL absoluteString]]) {
-    [self extractAccessCodeFromCallbackURL:request.URL];
-
-    return NO;
-  } else if (self.cancelURL && [[request.URL absoluteString] hasPrefix:[self.cancelURL absoluteString]]) {
-    if ([self.delegate respondsToSelector:@selector(oauthClientDidCancel:)]) {
-      [self.delegate oauthClientDidCancel:self];
-    }
-    
-    return NO;
-  }
-  
-  if ([self.delegate respondsToSelector:@selector(webView:shouldStartLoadWithRequest:navigationType:)]) {
-    return [self.delegate webView:webView shouldStartLoadWithRequest:request navigationType:navigationType];
-  }
-  
-  return YES;
-}
-
-/**
- * custom URL schemes will typically cause a failure so we should handle those here
- */
-- (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error
-{
-  
-#if __IPHONE_OS_VERSION_MAX_ALLOWED <= __IPHONE_3_2
-  NSString *failingURLString = [error.userInfo objectForKey:NSErrorFailingURLStringKey];
-#else
-  NSString *failingURLString = [error.userInfo objectForKey:NSURLErrorFailingURLStringErrorKey];
-#endif
-  
-  if ([failingURLString hasPrefix:[self.redirectURL absoluteString]]) {
-    [webView stopLoading];
-    [self extractAccessCodeFromCallbackURL:[NSURL URLWithString:failingURLString]];
-  } else if (self.cancelURL && [failingURLString hasPrefix:[self.cancelURL absoluteString]]) {
-    [webView stopLoading];
-    if ([self.delegate respondsToSelector:@selector(oauthClientDidCancel:)]) {
-      [self.delegate oauthClientDidCancel:self];
-    }
-  }
-  
-  if ([self.delegate respondsToSelector:@selector(webView:didFailLoadWithError:)]) {
-    [self.delegate webView:webView didFailLoadWithError:error];
-  }
-}
-
-- (void)webViewDidStartLoad:(UIWebView *)webView
-{
-  if ([self.delegate respondsToSelector:@selector(webViewDidStartLoad:)]) {
-    [self.delegate webViewDidStartLoad:webView];
-  }
-}
-
-- (void)webViewDidFinishLoad:(UIWebView *)webView
-{
-  if ([self.delegate respondsToSelector:@selector(webViewDidFinishLoad:)]) {
-    [self.delegate webViewDidFinishLoad:webView];
-  }
-}
+	[self requestFinished:request];
+//  }
+} 
 
 - (void)extractAccessCodeFromCallbackURL:(NSURL *)callbackURL;
 {
-  NSString *accessCode = [[callbackURL queryDictionary] valueForKey:@"code"];
-  
-  if ([self.delegate respondsToSelector:@selector(oauthClientDidReceiveAccessCode:)]) {
-    [self.delegate oauthClientDidReceiveAccessCode:self];
-  }
-  [self verifyAuthorizationWithAccessCode:accessCode];
+	NSString *accessCode = [[callbackURL queryDictionary] valueForKey:@"code"];
+	
+	if (accessCode.length == 0) {
+		if ([(id)self.delegate respondsToSelector:@selector(oauthClientDidFailToReceiveAccessCode:)])
+			[self.delegate oauthClientDidFailToReceiveAccessCode:self];
+		return;	
+	}
+	
+	if ([(id)self.delegate respondsToSelector:@selector(oauthClientDidReceiveAccessCode:)]) {
+		[self.delegate oauthClientDidReceiveAccessCode:self];
+	}
+	[self verifyAuthorizationWithAccessCode:accessCode];
 }
 
 @end
