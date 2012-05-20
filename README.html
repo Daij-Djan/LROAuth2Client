@@ -10,15 +10,13 @@ That said, I only implemented what I needed and there's also almost no documenta
 
 <h1>example usage:</h1>
 <h2>get access token:</h2>
-<code>
+<pre>
 - (void)getToken {
 	//prepare client
 	NSString *clientID = [_clientCredentials objectForKey:OAuthClientClientId];
 	NSString *clientSecret = [_clientCredentials objectForKey:OAuthClientClientSecret];
 	NSURL *redirectURL = [NSURL URLWithString:OAuthClientRedirectURL];	
-	_client = [[LROAuth2Client alloc] initWithClientID:clientID
-	 											secret:clientSecret
-	 									   redirectURL:redirectURL];
+	_client = [[LROAuth2Client alloc] initWithClientID:clientID secret:clientSecret redirectURL:redirectURL];
 	_client.delegate = self;
 	
 	//refresh a store token or get valid token if none stored
@@ -45,6 +43,8 @@ That said, I only implemented what I needed and there's also almost no documenta
         });
 	}
 }
+</pre>
+<pre>
 //called after we presented the url and are ready to continue.
 //our client's delegate will be called  after we are done here
 - (void)handleAuthorizationURL:(NSURL*)url {
@@ -53,18 +53,18 @@ That said, I only implemented what I needed and there's also almost no documenta
 
 	[_client extractAccessCodeFromCallbackURL:url];
 }
-</code>	
+</pre>	
 
 <h2>authorize HTTP Request:</h2>
-<code>
-//adds Authorization header to request 
-- (void)authorizeHTTPRequest:(ASIHTTPRequest*)request {
-	if(!_accessToken)
-		@throw [NSException exceptionWithName:@"LROAuth2ClientAuthorizationException" reason:@"should authorize, but have no token" userInfo:nil];
+<pre>
+	//adds Authorization header to request 
+	- (void)authorizeHTTPRequest:(ASIHTTPRequest*)request {
+		if(!_accessToken)
+			@throw [NSException exceptionWithName:@"LROAuth2ClientAuthorizationException" reason:@"should authorize, but have no token" userInfo:nil];
 
-	if([_accessToken hasExpired]) {
-		@throw [NSException exceptionWithName:@"LROAuth2ClientAuthorizationException" reason:@"should authorize, but needs to refresh the access token" userInfo:nil];
+		if([_accessToken hasExpired]) {
+			@throw [NSException exceptionWithName:@"LROAuth2ClientAuthorizationException" reason:@"should authorize, but needs to refresh the access token" userInfo:nil];
+		}
+		[_accessToken authorizeHTTPRequest:request];
 	}
-	[_accessToken authorizeHTTPRequest:request];
-}
-</code>
+</pre>
